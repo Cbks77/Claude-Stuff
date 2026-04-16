@@ -6,6 +6,13 @@
       "args": [
         "hostinger-api-mcp@latest"
       ]
+    },
+    "brevo-mcp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@houtini/brevo-mcp@latest"
+      ]
     }
   }
 }

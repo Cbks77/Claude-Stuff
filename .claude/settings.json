@@ -1,3 +1,3 @@
 {
-  "enabledMcpjsonServers": ["hostinger-mcp"]
+  "enabledMcpjsonServers": ["hostinger-mcp", "brevo-mcp"]
 }
