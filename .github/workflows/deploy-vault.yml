@@ -26,3 +26,45 @@ jobs:
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: 3e249442-35d2-485b-b66e-7910a9039fdb
+
+      - name: Register vault.cbks77.com on Netlify
+        run: |
+          HTTP=$(curl -s -o /tmp/netlify_domain.json -w "%{http_code}" -X POST \
+            "https://api.netlify.com/api/v1/sites/3e249442-35d2-485b-b66e-7910a9039fdb/domain_aliases" \
+            -H "Authorization: Bearer ${{ secrets.NETLIFY_AUTH_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"alias":"vault.cbks77.com"}')
+          echo "Netlify domain alias HTTP $HTTP"
+          cat /tmp/netlify_domain.json
+
+      - name: Create Cloudflare DNS CNAME for vault.cbks77.com
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "CLOUDFLARE_API_TOKEN not set — add it to repo secrets to automate DNS"
+            exit 0
+          fi
+          ZONE_ID=$(curl -sf "https://api.cloudflare.com/client/v4/zones?name=cbks77.com" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | \
+            python3 -c "import json,sys; data=json.load(sys.stdin); print(data['result'][0]['id'])")
+          echo "Zone: $ZONE_ID"
+          curl -s -X POST \
+            "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"type":"CNAME","name":"vault","content":"cbks77-vault.netlify.app","ttl":1,"proxied":false}' | \
+            python3 -c "
+import json, sys
+r = json.load(sys.stdin)
+if r['success']:
+  print('DNS CNAME created:', r['result']['name'], '->', r['result']['content'])
+else:
+  errs = r.get('errors', [])
+  # code 81057 = record already exists — that is fine
+  if any(e.get('code') == 81057 for e in errs):
+    print('DNS CNAME already exists — OK')
+  else:
+    print('DNS error:', errs)
+    raise SystemExit(1)
+"
