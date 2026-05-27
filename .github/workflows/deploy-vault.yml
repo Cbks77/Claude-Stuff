@@ -6,6 +6,7 @@ on:
     paths:
       - 'vault/**'
       - 'netlify.toml'
+      - '.github/workflows/deploy-vault.yml'
   workflow_dispatch:
 
 jobs:
