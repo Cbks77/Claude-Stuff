@@ -1,0 +1,26 @@
+name: Deploy Vault → Netlify
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'vault/**'
+      - 'netlify.toml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to Netlify
+        uses: netlify/actions/cli@master
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: 3e249442-35d2-485b-b66e-7910a9039fdb
+        with:
+          args: deploy --dir=vault --prod --message="Deploy from GitHub Actions (commit ${{ github.sha }})"
