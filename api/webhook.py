@@ -87,22 +87,35 @@ def parse_message(body: dict):
 
 
 def parse_kapso_message(body: dict):
-    """Kapso's own webhook event format fallback."""
+    """Kapso webhook event format — handles all known type variants."""
     try:
-        # Format: { "type": "message.received", "data": { "from": "...", "text": { "body": "..." } } }
-        if body.get("type") == "message.received":
-            data = body.get("data", {})
-            sender = data.get("from") or data.get("sender")
-            text = (data.get("text") or {}).get("body") or data.get("body") or data.get("message")
-            if sender and text:
-                return sender, text
+        event_type = body.get("type", "")
+
+        # Kapso formats: "whatsapp.message", "whatsapp.message.received", "message.received"
+        if "message" in event_type:
+            # Try body.data first
+            data = body.get("data") or body.get("message") or body
+            if isinstance(data, dict):
+                sender = (data.get("from") or data.get("sender") or
+                          data.get("phone_number") or data.get("wa_id"))
+                msg = data.get("text") or data.get("message") or data.get("body") or {}
+                text = msg.get("body") if isinstance(msg, dict) else msg
+                if not text:
+                    text = data.get("body") or data.get("content")
+                if sender and text:
+                    return str(sender), str(text)
+
         # Flat format: { "from": "...", "body": "..." }
         sender = body.get("from") or body.get("sender")
-        text = body.get("body") or body.get("text") or body.get("message")
+        text = body.get("body") or body.get("text") or body.get("content")
+        if isinstance(text, dict):
+            text = text.get("body")
         if sender and text:
-            return sender, text
+            return str(sender), str(text)
+
         return None
-    except Exception:
+    except Exception as e:
+        print(f"[PARSE ERROR] {e}")
         return None
 
 
@@ -122,7 +135,7 @@ class handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(length)
 
-        print(f"[RAW] {raw.decode()[:500]}")
+        print(f"[RAW] {raw.decode()[:2000]}")
 
         try:
             body = json.loads(raw.decode())
