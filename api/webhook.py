@@ -71,7 +71,7 @@ def send_whatsapp(to: str, text: str):
 
 
 def parse_message(body: dict):
-    """Returns (sender_phone, message_text) or None."""
+    """Standard Meta WhatsApp Cloud API format."""
     try:
         messages = (
             body.get("entry", [{}])[0]
@@ -82,6 +82,26 @@ def parse_message(body: dict):
         if not messages or messages[0].get("type") != "text":
             return None
         return messages[0]["from"], messages[0]["text"]["body"]
+    except Exception:
+        return None
+
+
+def parse_kapso_message(body: dict):
+    """Kapso's own webhook event format fallback."""
+    try:
+        # Format: { "type": "message.received", "data": { "from": "...", "text": { "body": "..." } } }
+        if body.get("type") == "message.received":
+            data = body.get("data", {})
+            sender = data.get("from") or data.get("sender")
+            text = (data.get("text") or {}).get("body") or data.get("body") or data.get("message")
+            if sender and text:
+                return sender, text
+        # Flat format: { "from": "...", "body": "..." }
+        sender = body.get("from") or body.get("sender")
+        text = body.get("body") or body.get("text") or body.get("message")
+        if sender and text:
+            return sender, text
+        return None
     except Exception:
         return None
 
@@ -103,13 +123,24 @@ class handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length)
         self._ok("OK")   # ack Kapso immediately
 
+        raw_str = raw.decode()
+        print(f"[RAW PAYLOAD] {raw_str[:500]}")
+
         try:
-            body = json.loads(raw.decode())
-        except Exception:
+            body = json.loads(raw_str)
+        except Exception as e:
+            print(f"[JSON ERROR] {e}")
             return
 
+        # Try standard Meta format first
         result = parse_message(body)
+
+        # Fallback: try Kapso's own event format
         if not result:
+            result = parse_kapso_message(body)
+
+        if not result:
+            print(f"[SKIP] Could not parse message from payload keys: {list(body.keys())}")
             return
 
         sender, text = result
