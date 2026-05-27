@@ -46,41 +46,51 @@ jobs:
             exit 0
           fi
 
-          # Get zone ID
+          # Get zone ID for cbks77.com
           ZONE_ID=$(curl -sf "https://api.cloudflare.com/client/v4/zones?name=cbks77.com" \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | \
-            python3 -c "import json,sys; d=json.load(sys.stdin); print(d['result'][0]['id'])")
-          echo "Zone: $ZONE_ID"
+            python3 -c "import json,sys; print(json.load(sys.stdin)['result'][0]['id'])")
+          echo "Zone ID: $ZONE_ID"
 
-          # Delete ALL existing 'vault' CNAME/A records (may point to old Vercel/other)
-          EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=vault.cbks77.com" \
-            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
-          echo "$EXISTING" | python3 -c "
-          import json, sys, os, subprocess
-          data = json.load(sys.stdin)
-          for r in data.get('result', []):
-              rid = r['id']
-              print(f'Deleting old record: {r[\"type\"]} {r[\"name\"]} -> {r.get(\"content\",\"\")} ({rid})')
-              result = subprocess.run([
-                  'curl', '-s', '-X', 'DELETE',
-                  f'https://api.cloudflare.com/client/v4/zones/{os.environ[\"ZONE_ID\"]}/dns_records/{rid}',
-                  '-H', f'Authorization: Bearer {os.environ[\"CLOUDFLARE_API_TOKEN\"]}'
-              ], capture_output=True, text=True)
-              print('Delete response:', result.stdout[:200])
-          " ZONE_ID="$ZONE_ID" CLOUDFLARE_API_TOKEN="$CLOUDFLARE_API_TOKEN"
+          # List all existing records for vault.cbks77.com and collect their IDs
+          RECORD_IDS=$(curl -s \
+            "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=vault.cbks77.com" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | \
+            python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for r in data.get('result', []):
+    print(r['id'] + ' ' + r['type'] + ' ' + r.get('content', ''))
+")
 
-          # Create fresh CNAME → Netlify (DNS-only, no proxy, so Netlify can verify SSL)
+          # Delete each existing record
+          if [ -n "$RECORD_IDS" ]; then
+            echo "Existing records:"
+            echo "$RECORD_IDS"
+            echo "$RECORD_IDS" | while read -r RID RTYPE RCONTENT; do
+              echo "Deleting $RTYPE $RCONTENT ($RID)"
+              curl -s -X DELETE \
+                "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$RID" \
+                -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | \
+                python3 -c "import json,sys; r=json.load(sys.stdin); print('Deleted OK' if r.get('success') else 'Delete failed:', r)"
+            done
+          else
+            echo "No existing records for vault.cbks77.com"
+          fi
+
+          # Create the Netlify CNAME (DNS-only, no proxy)
+          echo "Creating CNAME vault → cbks77-vault.netlify.app"
           curl -s -X POST \
             "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             -H "Content-Type: application/json" \
             -d '{"type":"CNAME","name":"vault","content":"cbks77-vault.netlify.app","ttl":1,"proxied":false}' | \
             python3 -c "
-          import json, sys
-          r = json.load(sys.stdin)
-          if r['success']:
-            print('✅ CNAME created:', r['result']['name'], '->', r['result']['content'])
-          else:
-            print('❌ DNS error:', r.get('errors'))
-            raise SystemExit(1)
-          "
+import json, sys
+r = json.load(sys.stdin)
+if r['success']:
+  print('✅ CNAME created:', r['result']['name'], '->', r['result']['content'])
+else:
+  print('❌ DNS error:', r.get('errors'))
+  raise SystemExit(1)
+"
