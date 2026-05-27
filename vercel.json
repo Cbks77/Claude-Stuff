@@ -1,0 +1,12 @@
+{
+  "functions": {
+    "api/webhook.py": {
+      "runtime": "python3.12",
+      "maxDuration": 30
+    }
+  },
+  "routes": [
+    { "src": "/webhook", "dest": "/api/webhook" },
+    { "src": "/api/webhook", "dest": "/api/webhook" }
+  ]
+}
