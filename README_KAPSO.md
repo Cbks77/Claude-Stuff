@@ -38,7 +38,8 @@ python kapso_whatsapp_agent.py
 |---|---|
 | `KAPSO_API_KEY` | `bdfee3d96ec07cbd1c74a40896c3b76f8db3178ecaef345193d63d076669df4d` |
 | `KAPSO_BASE_URL` | `https://api.kapso.ai` |
-| `KAPSO_PHONE_NUMBER_ID` | _(run `kapso_integration.py` to get this)_ |
+| `KAPSO_PHONE_NUMBER` | `+12028808947` |
+| `KAPSO_PHONE_NUMBER_ID` | `1042608998945774` |
 
 ---
 
@@ -58,8 +59,8 @@ python kapso_whatsapp_agent.py
 ## Send a Message (cURL)
 
 ```bash
-curl -X POST "https://api.kapso.ai/meta/whatsapp/v24.0/$KAPSO_PHONE_NUMBER_ID/messages" \
-  -H "X-API-Key: $KAPSO_API_KEY" \
+curl -X POST "https://api.kapso.ai/meta/whatsapp/v24.0/1042608998945774/messages" \
+  -H "X-API-Key: bdfee3d96ec07cbd1c74a40896c3b76f8db3178ecaef345193d63d076669df4d" \
   -H "Content-Type: application/json" \
   -d '{
     "messaging_product": "whatsapp",

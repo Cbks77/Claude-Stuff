@@ -17,10 +17,11 @@ import urllib.request
 import urllib.error
 
 # ── Config ────────────────────────────────────────────────────────────────────
-KAPSO_API_KEY        = os.environ.get("KAPSO_API_KEY",
-                         "bdfee3d96ec07cbd1c74a40896c3b76f8db3178ecaef345193d63d076669df4d")
-KAPSO_BASE_URL       = os.environ.get("KAPSO_BASE_URL", "https://api.kapso.ai")
-KAPSO_PHONE_NUMBER_ID = os.environ.get("KAPSO_PHONE_NUMBER_ID", "")   # fill after provisioning
+KAPSO_API_KEY         = os.environ.get("KAPSO_API_KEY",
+                          "bdfee3d96ec07cbd1c74a40896c3b76f8db3178ecaef345193d63d076669df4d")
+KAPSO_BASE_URL        = os.environ.get("KAPSO_BASE_URL", "https://api.kapso.ai")
+KAPSO_PHONE_NUMBER_ID = os.environ.get("KAPSO_PHONE_NUMBER_ID", "1042608998945774")
+KAPSO_PHONE_NUMBER    = os.environ.get("KAPSO_PHONE_NUMBER", "+12028808947")
 # ─────────────────────────────────────────────────────────────────────────────
 
 
