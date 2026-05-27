@@ -18,6 +18,9 @@ SYSTEM_PROMPT = (
 
 
 def ask_llm(message: str) -> str:
+    if not OPENROUTER_API_KEY:
+        print("[ERROR] OPENROUTER_API_KEY env var not set")
+        return "Setup error: OPENROUTER_API_KEY not configured on server."
     payload = {
         "model": MODEL,
         "messages": [
@@ -40,11 +43,19 @@ def ask_llm(message: str) -> str:
         with urllib.request.urlopen(req, timeout=25) as r:
             result = json.loads(r.read().decode())
             return result["choices"][0]["message"]["content"].strip()
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        print(f"[OpenRouter error {e.code}] {body}")
+        return f"AI error ({e.code}): {body[:200]}"
     except Exception as e:
-        return f"Sorry, AI error: {e}"
+        print(f"[OpenRouter error] {e}")
+        return f"AI error: {e}"
 
 
 def send_whatsapp(to: str, text: str):
+    if not KAPSO_API_KEY:
+        print("[ERROR] KAPSO_API_KEY env var not set")
+        return
     payload = {
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
@@ -63,11 +74,13 @@ def send_whatsapp(to: str, text: str):
     )
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
-            return json.loads(r.read().decode())
+            resp = json.loads(r.read().decode())
+            print(f"[Kapso sent] {resp}")
+            return resp
     except urllib.error.HTTPError as e:
         print(f"[Kapso error {e.code}] {e.read().decode()}")
     except Exception as e:
-        print(f"[Send error] {e}")
+        print(f"[Kapso send error] {e}")
 
 
 def parse_message(body: dict):
