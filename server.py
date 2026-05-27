@@ -12,11 +12,17 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
 # ── Config ────────────────────────────────────────────────────────────────────
-KAPSO_API_KEY         = os.environ["KAPSO_API_KEY"]
+KAPSO_API_KEY         = os.environ.get("KAPSO_API_KEY", "")
 KAPSO_PHONE_NUMBER_ID = os.environ.get("KAPSO_PHONE_NUMBER_ID", "1042608998945774")
-OPENROUTER_API_KEY    = os.environ["OPENROUTER_API_KEY"]
+OPENROUTER_API_KEY    = os.environ.get("OPENROUTER_API_KEY", "")
 MODEL                 = os.environ.get("MODEL", "google/gemini-2.0-flash-exp:free")
 PORT                  = int(os.environ.get("PORT", 8080))
+
+# ── Validate required keys ────────────────────────────────────────────────────
+_missing = [name for name, val in [("KAPSO_API_KEY", KAPSO_API_KEY), ("OPENROUTER_API_KEY", OPENROUTER_API_KEY)] if not val]
+if _missing:
+    print(f"[WARNING] Missing required environment variable(s): {', '.join(_missing)}")
+    print("[WARNING] The app will start but API calls will fail until these are set.")
 
 SYSTEM_PROMPT = """You are a smart, concise AI assistant for Curtis Brooks.
 You help him work on the move via WhatsApp — coding, planning, research, writing, anything.
