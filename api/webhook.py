@@ -121,26 +121,22 @@ class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(length)
-        self._ok("OK")   # ack Kapso immediately
 
-        raw_str = raw.decode()
-        print(f"[RAW PAYLOAD] {raw_str[:500]}")
+        print(f"[RAW] {raw.decode()[:500]}")
 
         try:
-            body = json.loads(raw_str)
+            body = json.loads(raw.decode())
         except Exception as e:
             print(f"[JSON ERROR] {e}")
+            self._ok("OK")
             return
 
-        # Try standard Meta format first
-        result = parse_message(body)
-
-        # Fallback: try Kapso's own event format
-        if not result:
-            result = parse_kapso_message(body)
+        # Try both payload formats
+        result = parse_message(body) or parse_kapso_message(body)
 
         if not result:
-            print(f"[SKIP] Could not parse message from payload keys: {list(body.keys())}")
+            print(f"[SKIP] Unknown payload keys: {list(body.keys())}")
+            self._ok("OK")
             return
 
         sender, text = result
@@ -148,11 +144,16 @@ class handler(BaseHTTPRequestHandler):
 
         if text.strip().lower() in ("/reset", "reset", "/clear", "clear"):
             send_whatsapp(sender, "Fresh start! What can I help you with?")
+            self._ok("OK")
             return
 
+        # Call LLM and send reply BEFORE returning 200
+        # (Vercel stops execution after response is sent)
         reply = ask_llm(text)
-        print(f"[OUT] {reply[:80]}")
+        print(f"[OUT] {reply[:120]}")
         send_whatsapp(sender, reply)
+
+        self._ok("OK")  # respond last so Vercel doesn't kill the function early
 
     def _ok(self, body: str):
         self.send_response(200)
