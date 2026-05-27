@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🔐 API Key Vault</title>
+  <style>
+    /* ── Design tokens ── */
+    :root {
+      --bg:          #0d0f1a;
+      --surface:     #161927;
+      --surface-2:   #1f2236;
+      --border:      #2a2f4e;
+      --accent:      #6c63ff;
+      --accent-h:    #5a52e0;
+      --text:        #e2e8f0;
+      --muted:       #8892a4;
+      --ok:          #10b981;
+      --warn:        #f59e0b;
+      --danger:      #ef4444;
+      --radius:      12px;
+      --shadow:      0 8px 32px rgba(0,0,0,.5);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* ─────────────────────────── LOCK SCREEN ─────────────────────────── */
+    #lock-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .lock-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: var(--shadow);
+    }
+
+    .lock-icon { font-size: 3rem; text-align: center; margin-bottom: .75rem; }
+
+    .lock-card h1 {
+      text-align: center;
+      font-size: 1.4rem;
+      margin-bottom: .25rem;
+    }
+
+    .lock-card .sub {
+      text-align: center;
+      color: var(--muted);
+      font-size: .85rem;
+      margin-bottom: 1.75rem;
+    }
+
+    .setup-info {
+      background: rgba(108,99,255,.1);
+      border: 1px solid rgba(108,99,255,.3);
+      border-radius: 8px;
+      padding: .875rem 1rem;
+      font-size: .8rem;
+      color: var(--muted);
+      margin-bottom: 1.5rem;
+      line-height: 1.5;
+    }
+    .setup-info strong { color: var(--accent); }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 1.5rem 0;
+    }
+
+    .security-note {
+      text-align: center;
+      font-size: .73rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    /* ─────────────────────────── APP SHELL ──────────────────────────── */
+    #app {
+      display: none;
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.75rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .header h1 {
+      font-size: 1.4rem;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      flex-wrap: wrap;
+    }
+
+    /* ── Search ── */
+    .search-wrap { position: relative; }
+    .search-wrap .icon {
+      position: absolute;
+      left: .75rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      pointer-events: none;
+    }
+    .search-wrap input {
+      padding-left: 2.25rem;
+      width: 210px;
+    }
+
+    /* ─────────────────────────── BUTTONS ────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      padding: .5rem 1rem;
+      border-radius: 8px;
+      font-size: .85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all .18s;
+      border: 1px solid transparent;
+      background: none;
+      color: var(--text);
+      white-space: nowrap;
+    }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    .btn-primary  { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-h); }
+
+    .btn-secondary { background: var(--surface); border-color: var(--border); }
+    .btn-secondary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+
+    .btn-danger { border-color: var(--danger); color: var(--danger); }
+    .btn-danger:hover:not(:disabled) { background: var(--danger); color: #fff; }
+
+    .btn-ghost { color: var(--muted); padding: .35rem .5rem; }
+    .btn-ghost:hover { color: var(--text); background: var(--surface-2); border-radius: 6px; }
+
+    .btn-sm { padding: .35rem .75rem; font-size: .8rem; }
+    .btn-full { width: 100%; justify-content: center; }
+
+    /* ─────────────────────────── FORMS ──────────────────────────────── */
+    input, select, textarea {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .6rem .875rem;
+      color: var(--text);
+      font-size: .875rem;
+      font-family: inherit;
+      width: 100%;
+      transition: border-color .18s;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    input::placeholder { color: var(--muted); }
+    select option { background: var(--surface-2); }
+
+    label {
+      display: block;
+      font-size: .78rem;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      margin-bottom: .35rem;
+    }
+
+    .form-group { display: flex; flex-direction: column; }
+
+    .pw-wrap { position: relative; }
+    .pw-wrap input { padding-right: 2.75rem; }
+    .pw-toggle {
+      position: absolute;
+      right: .75rem;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 1.1rem;
+      line-height: 1;
+      padding: 0;
+    }
+    .pw-toggle:hover { color: var(--text); }
+
+    .error-msg {
+      color: var(--danger);
+      font-size: .78rem;
+      margin-top: .4rem;
+      min-height: 1.1rem;
+    }
+
+    /* ─────────────────────────── ADD / EDIT FORM CARD ─────────────────── */
+    .form-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 1.75rem;
+      display: none;
+      animation: slideDown .2s ease;
+    }
+    .form-card.open { display: block; }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .form-card h2 {
+      font-size: .72rem;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--muted);
+      margin-bottom: 1.25rem;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    .full { grid-column: 1 / -1; }
+
+    .form-actions {
+      display: flex;
+      gap: .75rem;
+      justify-content: flex-end;
+      margin-top: 1.25rem;
+    }
+
+    /* ─────────────────────────── STATS BAR ──────────────────────────── */
+    .stats-bar {
+      display: flex;
+      gap: .75rem;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: .25rem .875rem;
+      font-size: .78rem;
+      color: var(--muted);
+    }
+
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot-ok   { background: var(--ok); }
+    .dot-warn { background: var(--warn); }
+    .dot-bad  { background: var(--danger); }
+
+    /* ─────────────────────────── FILTER TABS ────────────────────────── */
+    .filter-tabs {
+      display: flex;
+      gap: .5rem;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+    }
+
+    .ftab {
+      padding: .3rem .875rem;
+      border-radius: 999px;
+      font-size: .8rem;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      transition: all .18s;
+    }
+    .ftab.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    /* ─────────────────────────── TABLE ──────────────────────────────── */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 680px;
+    }
+
+    thead { background: var(--surface-2); }
+
+    th {
+      padding: .8rem 1rem;
+      text-align: left;
+      font-size: .72rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--muted);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: .8rem 1rem;
+      border-top: 1px solid var(--border);
+      font-size: .875rem;
+      vertical-align: middle;
+    }
+
+    tbody tr:hover td { background: rgba(108,99,255,.04); }
+    tbody tr.row-expired td { opacity: .65; }
+
+    /* ─────────────────────────── BADGES ─────────────────────────────── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .3rem;
+      padding: .18rem .6rem;
+      border-radius: 999px;
+      font-size: .72rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .badge-ok      { background: rgba(16,185,129,.15);  color: var(--ok); }
+    .badge-warn    { background: rgba(245,158,11,.15);  color: var(--warn); }
+    .badge-expired { background: rgba(239,68,68,.15);   color: var(--danger); }
+
+    .cat-pill {
+      display: inline-block;
+      padding: .15rem .5rem;
+      border-radius: 999px;
+      font-size: .7rem;
+      font-weight: 500;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    /* ─────────────────────────── KEY VALUE CELL ─────────────────────── */
+    .kv-cell { display: flex; align-items: center; gap: .4rem; }
+
+    .kv-text {
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: .78rem;
+      color: var(--muted);
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      cursor: default;
+    }
+    .kv-text.shown { color: var(--text); }
+
+    .action-btns { display: flex; gap: .15rem; }
+
+    .notes-cell {
+      max-width: 130px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--muted);
+      font-size: .8rem;
+    }
+
+    /* ─────────────────────────── EMPTY STATE ────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--muted);
+    }
+    .empty-state .icon { font-size: 2.5rem; margin-bottom: .75rem; }
+    .empty-state h3 { font-size: 1rem; margin-bottom: .4rem; color: var(--text); }
+    .empty-state p  { font-size: .85rem; }
+
+    /* ─────────────────────────── LOCK TIMER BADGE ───────────────────── */
+    .lock-timer {
+      font-size: .72rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: .3rem;
+    }
+
+    /* ─────────────────────────── TOAST ──────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 1.75rem;
+      right: 1.75rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: .75rem 1.25rem;
+      font-size: .875rem;
+      box-shadow: var(--shadow);
+      transform: translateY(120px);
+      opacity: 0;
+      transition: all .3s cubic-bezier(.34,1.56,.64,1);
+      z-index: 9999;
+      max-width: 340px;
+    }
+    #toast.up { transform: translateY(0); opacity: 1; }
+    #toast.err { border-color: var(--danger); color: var(--danger); }
+
+    /* ─────────────────────────── SCROLLBAR ──────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ─────────────────────────── RESPONSIVE ─────────────────────────── */
+    @media (max-width: 640px) {
+      .form-grid { grid-template-columns: 1fr; }
+      .full { grid-column: 1; }
+      .search-wrap input { width: 160px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════ LOCK SCREEN ═══════════════════════════ -->
+<div id="lock-screen">
+  <div class="lock-card">
+    <div class="lock-icon">🔐</div>
+    <h1>API Key Vault</h1>
+    <p class="sub" id="lock-sub">Your keys, AES-256 encrypted in your browser</p>
+
+    <div class="setup-info" id="setup-notice" style="display:none">
+      <strong>First-time setup</strong><br>
+      Create a master password to encrypt your vault. This password is <strong>never stored anywhere</strong>.
+      If you forget it, your data cannot be recovered — so store it safely.
+    </div>
+
+    <div class="form-group" style="margin-bottom:1rem">
+      <label for="masterPw" id="pw-label">Master Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="masterPw" placeholder="Enter master password" autocomplete="current-password">
+        <button class="pw-toggle" onclick="togglePw('masterPw')" type="button">👁</button>
+      </div>
+    </div>
+
+    <div class="form-group" id="confirm-group" style="display:none; margin-bottom:1rem">
+      <label for="confirmPw">Confirm Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="confirmPw" placeholder="Confirm master password" autocomplete="new-password">
+        <button class="pw-toggle" onclick="togglePw('confirmPw')" type="button">👁</button>
+      </div>
+    </div>
+
+    <div class="error-msg" id="lock-err"></div>
+
+    <button class="btn btn-primary btn-full" id="unlockBtn" onclick="handleUnlock()" style="margin-top:.25rem">
+      🔓 Unlock Vault
+    </button>
+
+    <hr class="divider">
+    <p class="security-note">
+      Encrypted with AES-256-GCM · Key derived via PBKDF2-SHA256 (310k rounds)<br>
+      All data stays in <em>your</em> browser. Nothing is sent to any server.
+    </p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ MAIN APP ══════════════════════════════ -->
+<div id="app">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>🔐 API Key Vault</h1>
+    <div class="header-right">
+      <div class="search-wrap">
+        <span class="icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Search…" oninput="renderKeys()">
+      </div>
+      <button class="btn btn-secondary" onclick="toggleForm()" id="addBtn">＋ Add Key</button>
+      <button class="btn btn-secondary btn-sm" onclick="exportVault()" title="Export JSON">⬇ Export</button>
+      <label class="btn btn-secondary btn-sm" style="cursor:pointer" title="Import JSON">
+        ⬆ Import
+        <input type="file" accept=".json" onchange="importVault(event)" style="display:none">
+      </label>
+      <div class="lock-timer" id="lockTimer" title="Auto-lock countdown"></div>
+      <button class="btn btn-secondary btn-sm" onclick="lockVault()" title="Lock vault">🔒 Lock</button>
+    </div>
+  </div>
+
+  <!-- Add / Edit Form -->
+  <div class="form-card" id="addForm">
+    <h2 id="formTitle">Add New API Key</h2>
+    <input type="hidden" id="editId">
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="fName">Key Name *</label>
+        <input type="text" id="fName" placeholder="e.g. Stripe Live Key">
+      </div>
+      <div class="form-group">
+        <label for="fCategory">Category</label>
+        <select id="fCategory">
+          <option value="">— None —</option>
+          <option>AI / ML</option>
+          <option>Analytics</option>
+          <option>Auth</option>
+          <option>Cloud</option>
+          <option>Database</option>
+          <option>Messaging</option>
+          <option>Payment</option>
+          <option>Storage</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="form-group full">
+        <label for="fValue">API Key Value *</label>
+        <div class="pw-wrap">
+          <input type="password" id="fValue" placeholder="sk_live_…" autocomplete="off">
+          <button class="pw-toggle" onclick="togglePw('fValue')" type="button">👁</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="fExpiry">Expiry Date</label>
+        <input type="date" id="fExpiry">
+      </div>
+      <div class="form-group">
+        <label for="fNotes">Notes</label>
+        <input type="text" id="fNotes" placeholder="Optional context or environment">
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="closeForm()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveKey()">💾 Save Key</button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-bar" id="statsBar"></div>
+
+  <!-- Filter Tabs -->
+  <div class="filter-tabs">
+    <button class="ftab active" onclick="setFilter('all',this)">All</button>
+    <button class="ftab" onclick="setFilter('active',this)">Active</button>
+    <button class="ftab" onclick="setFilter('expiring',this)">Expiring Soon</button>
+    <button class="ftab" onclick="setFilter('expired',this)">Expired</button>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Key Value</th>
+          <th>Category</th>
+          <th>Expires</th>
+          <th>Status</th>
+          <th>Notes</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="keyBody"></tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none">
+      <div class="icon">🗝️</div>
+      <h3>No keys found</h3>
+      <p>Click <strong>＋ Add Key</strong> to store your first API key.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   CONSTANTS
+═══════════════════════════════════════════════════════════════════════ */
+const LS_SALT = 'apivault_salt';
+const LS_DATA = 'apivault_data';
+const PBKDF2_ITER = 310_000;
+const AUTO_LOCK_MS = 15 * 60 * 1000; // 15 minutes
+
+/* ═══════════════════════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════════════════════ */
+let cryptoKey   = null; // AES-GCM CryptoKey — in memory only
+let apiKeys     = [];
+let filter      = 'all';
+let lockTimer   = null;
+let lockCountdown = null;
+let lockAt      = null;
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CRYPTO HELPERS  (Web Crypto API — no libraries needed)
+═══════════════════════════════════════════════════════════════════════ */
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+
+function toB64(buf)  { return btoa(String.fromCharCode(...new Uint8Array(buf))); }
+function fromB64(s)  {
+  const b = atob(s), u = new Uint8Array(b.length);
+  for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+  return u;
+}
+
+async function deriveKey(password, salt) {
+  const raw = await crypto.subtle.importKey(
+    'raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']
+  );
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: PBKDF2_ITER, hash: 'SHA-256' },
+    raw,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+async function encrypt(data, key) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv }, key, enc.encode(JSON.stringify(data))
+  );
+  return toB64(iv) + '.' + toB64(ct);
+}
+
+async function decrypt(blob, key) {
+  const [ivB64, ctB64] = blob.split('.');
+  const plain = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: fromB64(ivB64) }, key, fromB64(ctB64)
+  );
+  return JSON.parse(dec.decode(plain));
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   AUTO-LOCK
+═══════════════════════════════════════════════════════════════════════ */
+function resetLockTimer() {
+  clearTimeout(lockTimer);
+  clearInterval(lockCountdown);
+  lockAt = Date.now() + AUTO_LOCK_MS;
+  lockTimer = setTimeout(lockVault, AUTO_LOCK_MS);
+
+  // Update countdown display every 30s
+  lockCountdown = setInterval(() => {
+    const remaining = Math.max(0, lockAt - Date.now());
+    const mins = Math.ceil(remaining / 60000);
+    const el = document.getElementById('lockTimer');
+    if (el) el.textContent = `🕐 ${mins}m`;
+    if (remaining === 0) clearInterval(lockCountdown);
+  }, 30_000);
+
+  // Set initial display immediately
+  const el = document.getElementById('lockTimer');
+  if (el) el.textContent = `🕐 ${AUTO_LOCK_MS / 60000}m`;
+}
+
+['mousemove','keydown','click','touchstart'].forEach(ev =>
+  document.addEventListener(ev, () => { if (cryptoKey) resetLockTimer(); }, { passive: true })
+);
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LOCK / UNLOCK
+═══════════════════════════════════════════════════════════════════════ */
+const isNewVault = () => !localStorage.getItem(LS_SALT);
+
+window.addEventListener('DOMContentLoaded', () => {
+  if (isNewVault()) {
+    document.getElementById('setup-notice').style.display = 'block';
+    document.getElementById('lock-sub').textContent = 'Create a master password to get started';
+    document.getElementById('pw-label').textContent = 'New Master Password';
+    document.getElementById('confirm-group').style.display = 'block';
+    document.getElementById('unlockBtn').textContent = '🔐 Create Vault';
+  }
+  document.getElementById('masterPw').addEventListener('keydown', e => {
+    if (e.key === 'Enter') handleUnlock();
+  });
+  document.getElementById('masterPw').focus();
+});
+
+async function handleUnlock() {
+  const pw    = document.getElementById('masterPw').value;
+  const errEl = document.getElementById('lock-err');
+  setErr(errEl, '');
+
+  if (!pw) { setErr(errEl, 'Please enter your master password.'); return; }
+
+  const btn = document.getElementById('unlockBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Working…';
+
+  try {
+    if (isNewVault()) {
+      const conf = document.getElementById('confirmPw').value;
+      if (pw !== conf)      { setErr(errEl, 'Passwords do not match.'); return; }
+      if (pw.length < 8)    { setErr(errEl, 'Password must be at least 8 characters.'); return; }
+
+      const salt = crypto.getRandomValues(new Uint8Array(32));
+      localStorage.setItem(LS_SALT, toB64(salt));
+      cryptoKey = await deriveKey(pw, salt);
+      apiKeys   = [];
+      await persist();
+    } else {
+      const salt    = fromB64(localStorage.getItem(LS_SALT));
+      cryptoKey     = await deriveKey(pw, salt);
+      const blob    = localStorage.getItem(LS_DATA);
+      apiKeys       = blob ? await decrypt(blob, cryptoKey) : [];
+    }
+
+    errEl.textContent = '';
+    document.getElementById('lock-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    renderKeys();
+    updateStats();
+    resetLockTimer();
+
+  } catch {
+    setErr(errEl, 'Incorrect password or corrupted vault.');
+    cryptoKey = null;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = isNewVault() ? '🔐 Create Vault' : '🔓 Unlock Vault';
+  }
+}
+
+function lockVault() {
+  cryptoKey = null;
+  apiKeys   = [];
+  clearTimeout(lockTimer);
+  clearInterval(lockCountdown);
+  document.getElementById('masterPw').value = '';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('lock-screen').style.display = 'flex';
+  setTimeout(() => document.getElementById('masterPw').focus(), 50);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PERSISTENCE
+═══════════════════════════════════════════════════════════════════════ */
+async function persist() {
+  if (!cryptoKey) return;
+  localStorage.setItem(LS_DATA, await encrypt(apiKeys, cryptoKey));
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════════════════════════════════ */
+function uid() {
+  return (crypto.randomUUID?.() ?? Date.now().toString(36) + Math.random().toString(36).slice(2));
+}
+
+function esc(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function maskKey(v) {
+  if (!v || v.length <= 8) return '••••••••';
+  return v.slice(0,4) + '••••••••' + v.slice(-4);
+}
+
+function getStatus(expires) {
+  if (!expires) return 'active';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const exp   = new Date(expires + 'T00:00:00');
+  const days  = Math.ceil((exp - today) / 86_400_000);
+  if (days < 0)  return 'expired';
+  if (days <= 30) return 'expiring';
+  return 'active';
+}
+
+function setErr(el, msg) { el.textContent = msg; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   FORM
+═══════════════════════════════════════════════════════════════════════ */
+function toggleForm() {
+  const f = document.getElementById('addForm');
+  f.classList.contains('open') ? closeForm() : openForm();
+}
+
+function openForm(key = null) {
+  const f = document.getElementById('addForm');
+  f.classList.add('open');
+  document.getElementById('formTitle').textContent = key ? 'Edit API Key' : 'Add New API Key';
+  document.getElementById('editId').value    = key?.id    ?? '';
+  document.getElementById('fName').value    = key?.name  ?? '';
+  document.getElementById('fValue').value   = key?.value ?? '';
+  document.getElementById('fCategory').value= key?.category ?? '';
+  document.getElementById('fExpiry').value  = key?.expires  ?? '';
+  document.getElementById('fNotes').value   = key?.notes    ?? '';
+  f.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closeForm() {
+  document.getElementById('addForm').classList.remove('open');
+}
+
+async function saveKey() {
+  const name     = document.getElementById('fName').value.trim();
+  const value    = document.getElementById('fValue').value.trim();
+  const category = document.getElementById('fCategory').value;
+  const expires  = document.getElementById('fExpiry').value;
+  const notes    = document.getElementById('fNotes').value.trim();
+  const editId   = document.getElementById('editId').value;
+
+  if (!name || !value) { showToast('⚠️ Name and Key Value are required.', true); return; }
+
+  if (editId) {
+    const i = apiKeys.findIndex(k => k.id === editId);
+    if (i !== -1) apiKeys[i] = { ...apiKeys[i], name, value, category, expires, notes };
+    showToast('✅ Key updated!');
+  } else {
+    apiKeys.push({
+      id: uid(),
+      name, value, category, expires, notes,
+      created: new Date().toISOString().split('T')[0]
+    });
+    showToast('✅ Key added!');
+  }
+
+  await persist();
+  closeForm();
+  renderKeys();
+  updateStats();
+}
+
+async function deleteKey(id) {
+  if (!confirm('Delete this key? This cannot be undone.')) return;
+  apiKeys = apiKeys.filter(k => k.id !== id);
+  await persist();
+  renderKeys();
+  updateStats();
+  showToast('🗑️ Key deleted.');
+}
+
+function editKey(id) {
+  const k = apiKeys.find(k => k.id === id);
+  if (k) openForm(k);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   RENDER
+═══════════════════════════════════════════════════════════════════════ */
+function setFilter(f, btn) {
+  filter = f;
+  document.querySelectorAll('.ftab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  renderKeys();
+}
+
+function renderKeys() {
+  const q     = (document.getElementById('searchInput')?.value ?? '').toLowerCase();
+  const tbody = document.getElementById('keyBody');
+  const empty = document.getElementById('emptyState');
+
+  const visible = apiKeys.filter(k => {
+    const s     = getStatus(k.expires);
+    const match = [k.name, k.category, k.notes].some(v => (v||'').toLowerCase().includes(q));
+    const fOk   = filter === 'all' || s === filter;
+    return match && fOk;
+  });
+
+  if (!visible.length) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+
+  empty.style.display = 'none';
+
+  const BADGE = {
+    active:   `<span class="badge badge-ok">● Active</span>`,
+    expiring: `<span class="badge badge-warn">⚠ Expiring</span>`,
+    expired:  `<span class="badge badge-expired">✕ Expired</span>`,
+  };
+
+  tbody.innerHTML = visible.map(k => {
+    const s = getStatus(k.expires);
+    return `
+      <tr class="${s === 'expired' ? 'row-expired' : ''}">
+        <td><strong>${esc(k.name)}</strong></td>
+        <td>
+          <div class="kv-cell">
+            <span class="kv-text" id="kv-${k.id}">${esc(maskKey(k.value))}</span>
+            <button class="btn btn-ghost" title="Show / hide" onclick="toggleReveal('${k.id}')">👁</button>
+            <button class="btn btn-ghost" title="Copy to clipboard" onclick="copyKey('${k.id}')">📋</button>
+          </div>
+        </td>
+        <td>${k.category ? `<span class="cat-pill">${esc(k.category)}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+        <td style="white-space:nowrap">${k.expires || '<span style="color:var(--muted)">No expiry</span>'}</td>
+        <td>${BADGE[s]}</td>
+        <td><span class="notes-cell" title="${esc(k.notes)}">${esc(k.notes) || '<span style="color:var(--muted)">—</span>'}</span></td>
+        <td>
+          <div class="action-btns">
+            <button class="btn btn-ghost btn-sm" title="Edit" onclick="editKey('${k.id}')">✏️</button>
+            <button class="btn btn-ghost btn-sm" title="Delete" onclick="deleteKey('${k.id}')">🗑️</button>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function toggleReveal(id) {
+  const el  = document.getElementById('kv-' + id);
+  const key = apiKeys.find(k => k.id === id);
+  if (!el || !key) return;
+  if (el.classList.contains('shown')) {
+    el.textContent = maskKey(key.value);
+    el.classList.remove('shown');
+  } else {
+    el.textContent = key.value;
+    el.classList.add('shown');
+  }
+}
+
+async function copyKey(id) {
+  const key = apiKeys.find(k => k.id === id);
+  if (!key) return;
+  try {
+    await navigator.clipboard.writeText(key.value);
+    showToast('📋 Copied to clipboard!');
+  } catch {
+    showToast('⚠️ Clipboard unavailable — reveal the key manually.', true);
+  }
+}
+
+function updateStats() {
+  const counts = { active: 0, expiring: 0, expired: 0 };
+  apiKeys.forEach(k => counts[getStatus(k.expires)]++);
+  document.getElementById('statsBar').innerHTML = `
+    <div class="chip"><span class="dot dot-ok"></span>${counts.active} Active</div>
+    ${counts.expiring ? `<div class="chip"><span class="dot dot-warn"></span>${counts.expiring} Expiring Soon</div>` : ''}
+    ${counts.expired  ? `<div class="chip"><span class="dot dot-bad"></span>${counts.expired} Expired</div>` : ''}
+    <div class="chip">📦 ${apiKeys.length} Total</div>
+  `;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EXPORT / IMPORT
+═══════════════════════════════════════════════════════════════════════ */
+function exportVault() {
+  if (!apiKeys.length) { showToast('⚠️ No keys to export.', true); return; }
+
+  const ok = confirm(
+    '⚠️  Warning: This exports your keys as unencrypted JSON.\n\n' +
+    'Store the file securely and delete it when done.\n\n' +
+    'Click OK to continue.'
+  );
+  if (!ok) return;
+
+  const payload = JSON.stringify({
+    _note: 'API Vault export — keep this file secure.',
+    exported: new Date().toISOString(),
+    keys: apiKeys
+  }, null, 2);
+
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([payload], { type: 'application/json' })),
+    download: `api-vault-${new Date().toISOString().slice(0,10)}.json`
+  });
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast('⬇️ Exported — store the file securely!');
+}
+
+async function importVault(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  try {
+    const parsed = JSON.parse(await file.text());
+    const list   = Array.isArray(parsed) ? parsed : parsed.keys ?? [];
+    if (!Array.isArray(list)) throw new Error();
+
+    if (!confirm(`Import ${list.length} key(s)? Duplicates (by ID) will be skipped.`)) return;
+
+    const existing = new Set(apiKeys.map(k => k.id));
+    let added = 0;
+    for (const k of list) {
+      if (!k.id) k.id = uid();
+      if (!existing.has(k.id)) { apiKeys.push(k); added++; }
+    }
+
+    await persist();
+    renderKeys();
+    updateStats();
+    showToast(`✅ Imported ${added} key(s).`);
+  } catch {
+    showToast('⚠️ Import failed — invalid file.', true);
+  }
+
+  e.target.value = '';
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   UI UTILS
+═══════════════════════════════════════════════════════════════════════ */
+function togglePw(id) {
+  const el = document.getElementById(id);
+  el.type  = el.type === 'password' ? 'text' : 'password';
+}
+
+let _toastTimer;
+function showToast(msg, isErr = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = 'up' + (isErr ? ' err' : '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.className = '', 3200);
+}
+</script>
+</body>
+</html>
