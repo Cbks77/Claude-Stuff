@@ -1,6 +1,7 @@
 from http.server import BaseHTTPRequestHandler
 import json
 import os
+import re
 import urllib.request
 import urllib.error
 from urllib.parse import urlparse, parse_qs
@@ -19,8 +20,7 @@ SYSTEM_PROMPT = (
 
 def ask_llm(message: str) -> str:
     if not OPENROUTER_API_KEY:
-        print("[ERROR] OPENROUTER_API_KEY env var not set")
-        return "Setup error: OPENROUTER_API_KEY not configured on server."
+        return "Setup error: OPENROUTER_API_KEY not configured."
     payload = {
         "model": MODEL,
         "messages": [
@@ -44,9 +44,9 @@ def ask_llm(message: str) -> str:
             result = json.loads(r.read().decode())
             return result["choices"][0]["message"]["content"].strip()
     except urllib.error.HTTPError as e:
-        body = e.read().decode()
-        print(f"[OpenRouter error {e.code}] {body}")
-        return f"AI error ({e.code}): {body[:200]}"
+        err = e.read().decode()
+        print(f"[OpenRouter {e.code}] {err[:300]}")
+        return f"AI error {e.code}: {err[:150]}"
     except Exception as e:
         print(f"[OpenRouter error] {e}")
         return f"AI error: {e}"
@@ -54,154 +54,172 @@ def ask_llm(message: str) -> str:
 
 def send_whatsapp(to: str, text: str):
     if not KAPSO_API_KEY:
-        print("[ERROR] KAPSO_API_KEY env var not set")
-        return
+        print("[ERROR] KAPSO_API_KEY not set")
+        return None
+    # strip non-digits except leading +
+    to_clean = re.sub(r"[^\d]", "", to)
     payload = {
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
-        "to": to,
+        "to": to_clean,
         "type": "text",
-        "text": {"body": text},
+        "text": {"body": text[:4000]},
     }
     req = urllib.request.Request(
         f"https://api.kapso.ai/meta/whatsapp/v24.0/{KAPSO_PHONE_NUMBER_ID}/messages",
         data=json.dumps(payload).encode(),
-        headers={
-            "X-API-Key": KAPSO_API_KEY,
-            "Content-Type": "application/json",
-        },
+        headers={"X-API-Key": KAPSO_API_KEY, "Content-Type": "application/json"},
         method="POST",
     )
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
             resp = json.loads(r.read().decode())
-            print(f"[Kapso sent] {resp}")
+            print(f"[Kapso sent ok] to={to_clean}")
             return resp
     except urllib.error.HTTPError as e:
-        print(f"[Kapso error {e.code}] {e.read().decode()}")
+        print(f"[Kapso {e.code}] {e.read().decode()[:300]}")
     except Exception as e:
         print(f"[Kapso send error] {e}")
+    return None
 
 
-def parse_message(body: dict):
-    """Standard Meta WhatsApp Cloud API format."""
+def find_sender(raw: str, body: dict) -> str | None:
+    """Try every known location for the sender phone number."""
+    candidates = []
+
+    # 1. Standard Meta format
     try:
-        messages = (
-            body.get("entry", [{}])[0]
-                .get("changes", [{}])[0]
-                .get("value", {})
-                .get("messages", [])
-        )
-        if not messages or messages[0].get("type") != "text":
-            return None
-        return messages[0]["from"], messages[0]["text"]["body"]
+        msgs = (body.get("entry", [{}])[0]
+                    .get("changes", [{}])[0]
+                    .get("value", {})
+                    .get("messages", []))
+        if msgs:
+            candidates.append(msgs[0].get("from"))
     except Exception:
-        return None
+        pass
+
+    # 2. Kapso wrapped Meta format
+    for wrapper_key in ("payload", "data", "message", "event"):
+        try:
+            inner = body.get(wrapper_key, {})
+            msgs = (inner.get("entry", [{}])[0]
+                        .get("changes", [{}])[0]
+                        .get("value", {})
+                        .get("messages", []))
+            if msgs:
+                candidates.append(msgs[0].get("from"))
+        except Exception:
+            pass
+
+    # 3. Direct fields on body or body.data / body.message
+    for section in [body, body.get("data", {}), body.get("message", {}),
+                    body.get("contact", {}), body.get("customer", {})]:
+        if not isinstance(section, dict):
+            continue
+        for key in ("from", "sender", "phone_number", "wa_id", "phone", "msisdn", "number"):
+            val = section.get(key)
+            if val and isinstance(val, str):
+                candidates.append(val)
+
+    # 4. Regex fallback — grab any phone-like number from raw JSON
+    #    that is NOT our own bot number
+    phones = re.findall(r'"(\+?[1-9]\d{7,14})"', raw)
+    bot_ids = {KAPSO_PHONE_NUMBER_ID, "12028808947", "2028808947"}
+    for p in phones:
+        cleaned = re.sub(r"[^\d]", "", p)
+        if cleaned not in bot_ids and len(cleaned) >= 8:
+            candidates.append(p)
+
+    for c in candidates:
+        if c:
+            return str(c)
+    return None
 
 
-def parse_kapso_message(body: dict):
-    """Kapso webhook event format — handles all known type variants."""
+def find_text(body: dict) -> str | None:
+    """Try every known location for the message text."""
+    # Standard Meta
     try:
-        event_type = body.get("type", "")
+        msgs = (body.get("entry", [{}])[0]
+                    .get("changes", [{}])[0]
+                    .get("value", {})
+                    .get("messages", []))
+        if msgs and msgs[0].get("type") == "text":
+            return msgs[0]["text"]["body"]
+    except Exception:
+        pass
 
-        # Kapso formats: "whatsapp.message", "whatsapp.message.received", "message.received"
-        if "message" in event_type:
-            # Try body.data first
-            data = body.get("data") or body.get("message") or body
-            if isinstance(data, dict):
-                sender = (data.get("from") or data.get("sender") or
-                          data.get("phone_number") or data.get("wa_id"))
-                msg = data.get("text") or data.get("message") or data.get("body") or {}
-                text = msg.get("body") if isinstance(msg, dict) else msg
-                if not text:
-                    text = data.get("body") or data.get("content")
-                if sender and text:
-                    return str(sender), str(text)
-
-        # Flat format: { "from": "...", "body": "..." }
-        sender = body.get("from") or body.get("sender")
-        text = body.get("body") or body.get("text") or body.get("content")
-        if isinstance(text, dict):
-            text = text.get("body")
-        if sender and text:
-            return str(sender), str(text)
-
+    # Recursive search for text/body/content in nested dicts
+    def _search(obj, depth=0):
+        if depth > 6 or not isinstance(obj, dict):
+            return None
+        for key in ("body", "text", "content", "message", "msg"):
+            val = obj.get(key)
+            if isinstance(val, str) and len(val) > 0:
+                return val
+            if isinstance(val, dict):
+                t = val.get("body") or val.get("text") or val.get("content")
+                if isinstance(t, str):
+                    return t
+        for val in obj.values():
+            if isinstance(val, dict):
+                result = _search(val, depth + 1)
+                if result:
+                    return result
         return None
-    except Exception as e:
-        print(f"[PARSE ERROR] {e}")
-        return None
+
+    return _search(body)
 
 
 class handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
-        print(f"{fmt % args}")
+        print(fmt % args)
 
-    # Kapso webhook verification (GET)
     def do_GET(self):
         params = parse_qs(urlparse(self.path).query)
         challenge = params.get("hub.challenge", ["OK"])[0]
         self._ok(challenge)
 
-    # Incoming WhatsApp message (POST)
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
-        raw = self.rfile.read(length)
-        raw_str = raw.decode()
-        log = {"raw": raw_str[:300]}
+        raw_bytes = self.rfile.read(length)
+        raw = raw_bytes.decode("utf-8", errors="replace")
+
+        # Always log the FULL payload
+        print(f"[PAYLOAD] {raw}")
 
         try:
-            body = json.loads(raw_str)
-            log["keys"] = list(body.keys())
-            log["type"] = body.get("type", "none")
+            body = json.loads(raw)
         except Exception as e:
-            log["json_err"] = str(e)
-            print(f"[DEBUG] {json.dumps(log)}")
+            print(f"[JSON ERROR] {e}")
             self._ok("OK")
             return
 
-        result = parse_message(body) or parse_kapso_message(body)
+        sender = find_sender(raw, body)
+        text   = find_text(body)
 
-        if not result:
-            log["status"] = "SKIP_no_parse"
-            print(f"[DEBUG] {json.dumps(log)}")
-            # Send raw payload to the last known sender for debugging
-            debug_to = "447911123456"  # fallback
-            try:
-                first_entry = body.get("entry", [{}])[0]
-                changes = first_entry.get("changes", [{}])[0]
-                msgs = changes.get("value", {}).get("messages", [])
-                if msgs:
-                    debug_to = msgs[0].get("from", debug_to)
-            except Exception:
-                pass
-            try:
-                contacts = body.get("data", {})
-                if contacts.get("from"):
-                    debug_to = contacts["from"]
-            except Exception:
-                pass
-            send_whatsapp(debug_to, f"[DEBUG payload] {raw_str[:1000]}")
+        print(f"[PARSED] sender={sender!r} text={text!r}")
+
+        if not sender:
+            print("[SKIP] could not find sender")
             self._ok("OK")
             return
 
-        sender, text = result
-        log["sender"] = sender
-        log["text"] = text
+        if not text:
+            # Send the raw payload back so we can debug the format
+            send_whatsapp(sender, f"[debug] payload keys: {list(body.keys())} | raw: {raw[:600]}")
+            self._ok("OK")
+            return
 
         if text.strip().lower() in ("/reset", "reset", "/clear", "clear"):
             send_whatsapp(sender, "Fresh start! What can I help you with?")
-            log["status"] = "reset"
-            print(f"[DEBUG] {json.dumps(log)}")
             self._ok("OK")
             return
 
         reply = ask_llm(text)
-        log["reply"] = reply[:200]
-        send_result = send_whatsapp(sender, reply)
-        log["send"] = str(send_result)[:100]
-        log["status"] = "DONE"
-        print(f"[DEBUG] {json.dumps(log)}")
+        print(f"[REPLY] {reply[:120]}")
+        send_whatsapp(sender, reply)
         self._ok("OK")
 
     def _ok(self, body: str):
