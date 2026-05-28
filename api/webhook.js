@@ -60,20 +60,27 @@ async function sendWhatsApp(to, text) {
   return data;
 }
 
-export default async function handler(req) {
+export default async function handler(req, res) {
   // Webhook verification (GET)
   if (req.method === "GET") {
-    const url  = new URL(req.url);
+    const url = new URL(req.url, "https://example.com");
     const challenge = url.searchParams.get("hub.challenge") || "OK";
-    return new Response(challenge, { status: 200 });
+    return res.status(200).send(challenge);
   }
 
   // Incoming webhook (POST)
   if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    return res.status(405).send("Method not allowed");
   }
 
-  const raw = await req.text();
+  // Read raw body from stream (bodyParser is disabled)
+  const raw = await new Promise((resolve, reject) => {
+    let data = "";
+    req.on("data", chunk => { data += chunk; });
+    req.on("end", () => resolve(data));
+    req.on("error", reject);
+  });
+
   console.log("[RAW]", raw.slice(0, 800));
 
   let payload;
@@ -81,10 +88,9 @@ export default async function handler(req) {
     payload = JSON.parse(raw);
   } catch (e) {
     console.error("[JSON parse error]", e.message);
-    return new Response("OK", { status: 200 });
+    return res.status(200).send("OK");
   }
 
-  // Use Kapso's official normalizer — handles all their webhook formats
   let events;
   try {
     events = normalizeWebhook(payload);
@@ -98,7 +104,6 @@ export default async function handler(req) {
   for (const msg of events.messages || []) {
     console.log("[MSG]", JSON.stringify(msg).slice(0, 300));
 
-    // Only handle inbound text messages
     if (msg.type !== "text") continue;
     if (msg.kapso?.direction === "outbound") continue;
 
@@ -119,7 +124,7 @@ export default async function handler(req) {
     await sendWhatsApp(sender, reply);
   }
 
-  return new Response("OK", { status: 200 });
+  return res.status(200).send("OK");
 }
 
-export const config = { runtime: "edge" };
+export const config = { api: { bodyParser: false } };
