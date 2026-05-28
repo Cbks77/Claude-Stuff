@@ -147,39 +147,45 @@ class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(length)
-
-        print(f"[RAW] {raw.decode()[:2000]}")
+        raw_str = raw.decode()
+        log = {"raw": raw_str[:300]}
 
         try:
-            body = json.loads(raw.decode())
+            body = json.loads(raw_str)
+            log["keys"] = list(body.keys())
+            log["type"] = body.get("type", "none")
         except Exception as e:
-            print(f"[JSON ERROR] {e}")
+            log["json_err"] = str(e)
+            print(f"[DEBUG] {json.dumps(log)}")
             self._ok("OK")
             return
 
-        # Try both payload formats
         result = parse_message(body) or parse_kapso_message(body)
 
         if not result:
-            print(f"[SKIP] Unknown payload keys: {list(body.keys())}")
+            log["status"] = "SKIP_no_parse"
+            print(f"[DEBUG] {json.dumps(log)}")
             self._ok("OK")
             return
 
         sender, text = result
-        print(f"[IN] {sender}: {text}")
+        log["sender"] = sender
+        log["text"] = text
 
         if text.strip().lower() in ("/reset", "reset", "/clear", "clear"):
             send_whatsapp(sender, "Fresh start! What can I help you with?")
+            log["status"] = "reset"
+            print(f"[DEBUG] {json.dumps(log)}")
             self._ok("OK")
             return
 
-        # Call LLM and send reply BEFORE returning 200
-        # (Vercel stops execution after response is sent)
         reply = ask_llm(text)
-        print(f"[OUT] {reply[:120]}")
-        send_whatsapp(sender, reply)
-
-        self._ok("OK")  # respond last so Vercel doesn't kill the function early
+        log["reply"] = reply[:200]
+        send_result = send_whatsapp(sender, reply)
+        log["send"] = str(send_result)[:100]
+        log["status"] = "DONE"
+        print(f"[DEBUG] {json.dumps(log)}")
+        self._ok("OK")
 
     def _ok(self, body: str):
         self.send_response(200)
