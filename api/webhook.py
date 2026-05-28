@@ -165,6 +165,23 @@ class handler(BaseHTTPRequestHandler):
         if not result:
             log["status"] = "SKIP_no_parse"
             print(f"[DEBUG] {json.dumps(log)}")
+            # Send raw payload to the last known sender for debugging
+            debug_to = "447911123456"  # fallback
+            try:
+                first_entry = body.get("entry", [{}])[0]
+                changes = first_entry.get("changes", [{}])[0]
+                msgs = changes.get("value", {}).get("messages", [])
+                if msgs:
+                    debug_to = msgs[0].get("from", debug_to)
+            except Exception:
+                pass
+            try:
+                contacts = body.get("data", {})
+                if contacts.get("from"):
+                    debug_to = contacts["from"]
+            except Exception:
+                pass
+            send_whatsapp(debug_to, f"[DEBUG payload] {raw_str[:1000]}")
             self._ok("OK")
             return
 
