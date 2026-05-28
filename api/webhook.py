@@ -186,20 +186,18 @@ class handler(BaseHTTPRequestHandler):
         raw_bytes = self.rfile.read(length)
         raw = raw_bytes.decode("utf-8", errors="replace")
 
-        # Always log the FULL payload
-        print(f"[PAYLOAD] {raw}")
-
         try:
             body = json.loads(raw)
         except Exception as e:
-            print(f"[JSON ERROR] {e}")
+            print(f"[JSON ERROR] {e} | raw={raw[:300]}")
             self._ok("OK")
             return
 
         sender = find_sender(raw, body)
         text   = find_text(body)
 
-        print(f"[PARSED] sender={sender!r} text={text!r}")
+        # Single line with everything visible
+        print(f"[RESULT] sender={sender!r} text={text!r} type={body.get('type')} keys={list(body.keys())} raw={raw[:400]}")
 
         if not sender:
             print("[SKIP] could not find sender")
