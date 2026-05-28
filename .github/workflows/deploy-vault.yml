@@ -41,12 +41,16 @@ jobs:
 
       - name: Point vault.cbks77.com → Netlify via Hostinger DNS
         env:
-          HAPI: aO72rQwYmO0hmfXTGFUMvPNwMNJNw5zVh1mqKyJXe204f199
+          HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
         run: |
+          if [ -z "$HOSTINGER_API_TOKEN" ]; then
+            echo "HOSTINGER_API_TOKEN secret not set - skipping"
+            exit 0
+          fi
           echo "Updating vault CNAME → cbks77-vault.netlify.app"
           HTTP=$(curl -s -o /tmp/dns_resp.json -w "%{http_code}" -X PUT \
             "https://api.hostinger.com/api/dns/v1/zones/cbks77.com" \
-            -H "Authorization: Bearer $HAPI" \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
             -H "Content-Type: application/json" \
             -d '{"overwrite":true,"zone":[{"name":"vault","type":"CNAME","ttl":300,"records":[{"content":"cbks77-vault.netlify.app"}]}]}')
           echo "Hostinger DNS HTTP $HTTP"
