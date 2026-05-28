@@ -1,5 +1,3 @@
-import { normalizeWebhook } from "@kapso/whatsapp-cloud-api/server";
-
 const KAPSO_API_KEY         = process.env.KAPSO_API_KEY         || "";
 const KAPSO_PHONE_NUMBER_ID = process.env.KAPSO_PHONE_NUMBER_ID || "1042608998945774";
 const OPENROUTER_API_KEY    = process.env.OPENROUTER_API_KEY    || "";
@@ -9,6 +7,28 @@ const SYSTEM_PROMPT =
   "You are a smart, concise AI assistant for Curtis Brooks. " +
   "You help him work on the move via WhatsApp — coding, planning, research, writing, anything. " +
   "Keep replies short and clear unless detail is asked for. Use plain text, no markdown.";
+
+// Replicates normalizeWebhook() from @kapso/whatsapp-cloud-api/server.
+// Kapso sends standard Meta webhook format (entry/changes/value/messages)
+// with an extra top-level "type" field. No SDK needed.
+function parseInboundMessages(payload) {
+  const messages = [];
+  const entries = Array.isArray(payload?.entry) ? payload.entry : [];
+  for (const entry of entries) {
+    const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+    for (const change of changes) {
+      const value = change?.value;
+      if (!value || typeof value !== "object") continue;
+      const msgs = Array.isArray(value.messages) ? value.messages : [];
+      for (const msg of msgs) {
+        if (msg.type === "text" && msg.from && msg.text?.body) {
+          messages.push({ from: msg.from, text: msg.text.body });
+        }
+      }
+    }
+  }
+  return messages;
+}
 
 async function askLLM(message) {
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -68,12 +88,10 @@ export default async function handler(req, res) {
     return res.status(200).send(challenge);
   }
 
-  // Incoming webhook (POST)
   if (req.method !== "POST") {
     return res.status(405).send("Method not allowed");
   }
 
-  // Read raw body from stream (bodyParser is disabled)
   const raw = await new Promise((resolve, reject) => {
     let data = "";
     req.on("data", chunk => { data += chunk; });
@@ -81,7 +99,7 @@ export default async function handler(req, res) {
     req.on("error", reject);
   });
 
-  console.log("[RAW]", raw.slice(0, 800));
+  console.log("[RAW]", raw.slice(0, 1200));
 
   let payload;
   try {
@@ -91,37 +109,20 @@ export default async function handler(req, res) {
     return res.status(200).send("OK");
   }
 
-  let events;
-  try {
-    events = normalizeWebhook(payload);
-  } catch (e) {
-    console.error("[normalizeWebhook error]", e.message);
-    events = { messages: [] };
-  }
+  const messages = parseInboundMessages(payload);
+  console.log("[MSGS]", messages.length);
 
-  console.log("[EVENTS] messages=" + (events.messages?.length || 0));
-
-  for (const msg of events.messages || []) {
-    console.log("[MSG]", JSON.stringify(msg).slice(0, 300));
-
-    if (msg.type !== "text") continue;
-    if (msg.kapso?.direction === "outbound") continue;
-
-    const sender = msg.from;
-    const text   = msg.text?.body || "";
-
-    if (!sender || !text) continue;
-
-    console.log("[IN]", sender, ":", text);
+  for (const { from, text } of messages) {
+    console.log("[IN]", from, ":", text);
 
     if (["reset", "/reset", "clear", "/clear"].includes(text.trim().toLowerCase())) {
-      await sendWhatsApp(sender, "Fresh start! What can I help you with?");
+      await sendWhatsApp(from, "Fresh start! What can I help you with?");
       continue;
     }
 
     const reply = await askLLM(text);
     console.log("[OUT]", reply.slice(0, 120));
-    await sendWhatsApp(sender, reply);
+    await sendWhatsApp(from, reply);
   }
 
   return res.status(200).send("OK");
